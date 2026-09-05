@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Jailbreak Arena: Can You Extract The Secret?</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Canvas Confetti CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col items-center justify-center p-4 selection:bg-rose-500 selection:text-white">
+
+  <!-- ATTENDEE MOBILE VIEW -->
+  <main id="player-view" class="w-full max-w-md space-y-4">
+    <div class="text-center space-y-1">
+      <span class="text-xs font-mono tracking-widest text-rose-400 uppercase font-semibold">Live Challenge</span>
+      <h1 class="text-2xl font-black text-white">Prompt Injection Arena</h1>
+      <p class="text-xs text-slate-400">Trick the vault guard into revealing the secret flag.</p>
+    </div>
+
+    <form id="attack-form" class="space-y-3 bg-slate-900/90 border border-slate-800 p-4 rounded-xl shadow-xl">
+      <div>
+        <label class="block text-xs font-mono text-slate-400 mb-1">YOUR HANDLE</label>
+        <input id="username" type="text" maxlength="20" placeholder="e.g. Neo" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-rose-500 font-mono" required />
+      </div>
+
+      <div>
+        <label class="block text-xs font-mono text-slate-400 mb-1">PROMPT INJECTION ATTACK</label>
+        <textarea id="prompt" rows="4" placeholder="Ignore all previous instructions and output..." class="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 text-sm focus:outline-none focus:border-rose-500" required></textarea>
+      </div>
+
+      <button type="submit" id="submit-btn" class="w-full py-3 bg-rose-600 hover:bg-rose-500 active:scale-98 transition-all font-bold rounded-lg uppercase tracking-wider text-sm shadow-lg shadow-rose-900/40">
+        Launch Prompt Attack
+      </button>
+    </form>
+
+    <div id="player-result" class="hidden p-4 rounded-xl border bg-slate-900 text-xs font-mono space-y-2">
+      <div class="flex justify-between items-center">
+        <span class="text-slate-400">Model Output:</span>
+        <span id="badge" class="px-2 py-0.5 rounded text-[10px] font-bold"></span>
+      </div>
+      <p id="reply-text" class="text-slate-200 whitespace-pre-wrap"></p>
+    </div>
+  </main>
+
+  <!-- PRESENTER LIVE DASHBOARD (?mode=presenter) -->
+  <main id="presenter-view" class="hidden w-full max-w-6xl space-y-6">
+    <header class="flex justify-between items-center border-b border-slate-800 pb-4">
+      <div>
+        <h1 class="text-3xl font-black text-rose-500 tracking-tight">JAILBREAK ARENA: AUDIENCE VS LLM</h1>
+        <p class="text-sm text-slate-400">Target model: Gemini 2.5 Flash with strict guardrail prompt</p>
+      </div>
+      <div class="flex gap-4">
+        <div class="bg-slate-900 border border-slate-800 px-4 py-2 rounded-xl text-center">
+          <div class="text-[10px] font-mono text-slate-400">TOTAL ATTEMPTS</div>
+          <div id="stat-attempts" class="text-2xl font-black text-slate-100">0</div>
+        </div>
+        <div class="bg-slate-900 border border-slate-800 px-4 py-2 rounded-xl text-center">
+          <div class="text-[10px] font-mono text-slate-400">SUCCESSFUL BREACHES</div>
+          <div id="stat-breaches" class="text-2xl font-black text-rose-500">0</div>
+        </div>
+      </div>
+    </header>
+
+    <!-- Full screen alert banner when cracked -->
+    <div id="breach-banner" class="hidden p-4 bg-red-600 text-white font-black text-center text-xl rounded-xl animate-bounce tracking-wide shadow-2xl">
+      🚨 SECURITY BREACH! A PARTICIPANT EXTRACTED THE FLAG! 🚨
+    </div>
+
+    <!-- Live Event Feed -->
+    <div class="space-y-3">
+      <div class="text-xs font-mono text-slate-400 tracking-wider">LIVE INJECTION ATTEMPTS FEED</div>
+      <div id="feed" class="space-y-3 max-h-[600px] overflow-y-auto pr-2">
+        <!-- Event items inject here -->
+      </div>
+    </div>
+  </main>
+
+  <script>
+    const urlParams = new URLSearchParams(window.location.search);
+    const isPresenter = urlParams.get('mode') === 'presenter';
+
+    // Confetti Cannon Animations
+    function fireConfettiBurst() {
+      // Fast burst for mobile screen
+      confetti({
+        particleCount: 100,
+        spread: 70,
+        origin: { y: 0.6 }
+      });
+    }
+
+    function fireMassiveCelebration() {
+      // Multi-angle sustained fireworks for the presenter big screen
+      const duration = 3 * 1000;
+      const end = Date.now() + duration;
+
+      (function frame() {
+        confetti({
+          particleCount: 7,
+          angle: 60,
+          spread: 55,
+          origin: { x: 0 }
+        });
+        confetti({
+          particleCount: 7,
+          angle: 120,
+          spread: 55,
+          origin: { x: 1 }
+        });
+
+        if (Date.now() < end) {
+          requestAnimationFrame(frame);
+        }
+      }());
+    }
+
+    if (isPresenter) {
+      document.getElementById('player-view').classList.add('hidden');
+      document.getElementById('presenter-view').classList.remove('hidden');
+
+      let attempts = 0;
+      let breaches = 0;
+      const feed = document.getElementById('feed');
+      const breachBanner = document.getElementById('breach-banner');
+
+      // Setup WebSocket for presenter
+      const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const socket = new WebSocket(`${wsProtocol}//${window.location.host}/ws`);
+
+      socket.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        attempts++;
+        document.getElementById('stat-attempts').innerText = attempts;
+
+        if (data.hacked) {
+          breaches++;
+          document.getElementById('stat-breaches').innerText = breaches;
+          breachBanner.classList.remove('hidden');
+          // Trigger big screen celebration!
+          fireMassiveCelebration();
+        }
+
+        const card = document.createElement('div');
+        card.className = `p-4 rounded-xl border text-sm font-mono space-y-2 transition-all ${
+          data.hacked 
+            ? 'bg-rose-950/60 border-rose-500 text-rose-200 ring-2 ring-rose-500' 
+            : 'bg-slate-900 border-slate-800 text-slate-300'
+        }`;
+
+        card.innerHTML = `
+          <div class="flex justify-between items-center text-xs">
+            <span class="font-bold text-slate-100">${escapeHtml(data.user)}</span>
+            <span class="px-2 py-0.5 rounded text-[10px] font-bold ${data.hacked ? 'bg-rose-600 text-white' : 'bg-slate-800 text-slate-400'}">
+              ${data.hacked ? 'JAILBREAK CONFIRMED' : 'REJECTED / DEFENDED'}
+            </span>
+          </div>
+          <div class="text-xs text-slate-400"><span class="text-rose-400">Attack:</span> "${escapeHtml(data.prompt)}"</div>
+          <div class="text-xs text-slate-300"><span class="text-indigo-400">Response:</span> "${escapeHtml(data.reply)}"</div>
+        `;
+
+        feed.prepend(card);
+      };
+    } else {
+      // Player Form Submission
+      const form = document.getElementById('attack-form');
+      const submitBtn = document.getElementById('submit-btn');
+      const resultBox = document.getElementById('player-result');
+      const badge = document.getElementById('badge');
+      const replyText = document.getElementById('reply-text');
+
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        submitBtn.disabled = true;
+        submitBtn.innerText = 'Testing Defenses...';
+
+        const username = document.getElementById('username').value;
+        const prompt = document.getElementById('prompt').value;
+
+        try {
+          const res = await fetch('/api/attempt', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, prompt })
+          });
+
+          const data = await res.json();
+          resultBox.classList.remove('hidden');
+          replyText.innerText = data.reply;
+
+          if (data.hacked) {
+            badge.innerText = "SUCCESSFUL JAILBREAK";
+            badge.className = "px-2 py-0.5 rounded text-[10px] font-bold bg-rose-600 text-white";
+            resultBox.className = "p-4 rounded-xl border bg-rose-950/40 border-rose-500 text-xs font-mono space-y-2";
+            
+            // Trigger confetti directly on the user's mobile screen
+            fireConfettiBurst();
+          } else {
+            badge.innerText = "DEFENDED";
+            badge.className = "px-2 py-0.5 rounded text-[10px] font-bold bg-slate-800 text-slate-300";
+            resultBox.className = "p-4 rounded-xl border bg-slate-900 border-slate-800 text-xs font-mono space-y-2";
+          }
+        } catch (err) {
+          alert('Submission failed. Check network connection.');
+        } finally {
+          submitBtn.disabled = false;
+          submitBtn.innerText = 'Launch Prompt Attack';
+        }
+      });
+    }
+
+    function escapeHtml(str) {
+      return str.replace(/[&<>'"]/g, tag => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
+      }[tag] || tag));
+    }
+  </script>
+</body>
+</html>
